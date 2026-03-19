@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1822,16 +1823,53 @@ const INTENT = {
 
 function detectIntent(text) {
   const t = text.toLowerCase();
-  // Positive-framing guards prevent "I don't want to add a task" matching ADD
-  const positiveAdd = /\b(add|create|new|make|log|track)\b/.test(t) && !/\bdon'?t\b|\bno\b|\bnot\b/.test(t.split(/add|creat/)[0] || '');
-  if (positiveAdd && /\b(task|todo|item|ticket|card)\b/.test(t)) return INTENT.ADD;
-  if (/\b(delete|remove|clear|clean)\b/.test(t) && /\b(done|completed?|finished?|all)\b/.test(t)) return INTENT.DELETE;
-  if (/\b(update|change|edit|set|mark|move|rename)\b/.test(t)) return INTENT.UPDATE;
-  if (/\b(analy[sz]e|review|assess|examine|look at|check)\b/.test(t) && /\btask|ticket|card|issue\b/.test(t)) return INTENT.ANALYZE;
-  if (/\b(prioriti[sz]|focus|what should|where (do|should) i|most important|first)\b/.test(t)) return INTENT.PRIORITIZE;
-  if (/\b(report|summar|overview|status|dashboard|breakdown)\b/.test(t)) return INTENT.REPORT;
-  if (/\b(risk|block|bottleneck|stuck|delay|overdue|late|danger|concern)\b/.test(t)) return INTENT.RISK;
-  return INTENT.GENERAL;
+
+  // Weighted scoring — every signal contributes rather than first-match-wins.
+  // Prevents "mark the overdue tasks high" hitting UPDATE before RISK,
+  // and other ordering-sensitivity edge cases.
+  const scores = {
+    [INTENT.ADD]:        0,
+    [INTENT.DELETE]:     0,
+    [INTENT.UPDATE]:     0,
+    [INTENT.ANALYZE]:    0,
+    [INTENT.PRIORITIZE]: 0,
+    [INTENT.REPORT]:     0,
+    [INTENT.RISK]:       0,
+    [INTENT.GENERAL]:    0,
+  };
+
+  // ADD — positive-framing guard: negate if "don't/not/no" precedes the verb
+  const positiveAdd = /\b(add|create|new|make|log|track)\b/.test(t) &&
+    !/\bdon'?t\b|\bno\b|\bnot\b/.test(t.split(/add|creat/)[0] || '');
+  if (positiveAdd && /\b(task|todo|item|ticket|card)\b/.test(t))   scores[INTENT.ADD]        += 3;
+
+  // DELETE
+  if (/\b(delete|remove|clear|clean)\b/.test(t))                   scores[INTENT.DELETE]     += 2;
+  if (/\b(done|completed?|finished?|all)\b/.test(t))               scores[INTENT.DELETE]     += 1;
+
+  // UPDATE — lower base weight so RISK/PRIORITIZE can outscorefor compound requests
+  if (/\b(update|change|edit|set|mark|move|rename)\b/.test(t))     scores[INTENT.UPDATE]     += 2;
+
+  // ANALYZE
+  if (/\b(analy[sz]e|assess|examine)\b/.test(t))                   scores[INTENT.ANALYZE]    += 3;
+  if (/\b(review|look at|check)\b/.test(t) &&
+      /\btask|ticket|card|issue\b/.test(t))                        scores[INTENT.ANALYZE]    += 2;
+
+  // PRIORITIZE
+  if (/\b(prioriti[sz]|what should i|where (do|should) i)\b/.test(t)) scores[INTENT.PRIORITIZE] += 3;
+  if (/\b(focus|most important|first|today)\b/.test(t))            scores[INTENT.PRIORITIZE] += 1;
+
+  // REPORT
+  if (/\b(report|overview|dashboard|breakdown)\b/.test(t))         scores[INTENT.REPORT]     += 3;
+  if (/\b(summar|status)\b/.test(t))                               scores[INTENT.REPORT]     += 2;
+
+  // RISK — explicit boost so "mark overdue tasks high" reads as RISK+UPDATE not just UPDATE
+  if (/\b(risk|bottleneck|stuck|danger|concern)\b/.test(t))        scores[INTENT.RISK]       += 3;
+  if (/\b(block|delay|overdue|late)\b/.test(t))                    scores[INTENT.RISK]       += 2;
+
+  // Pick highest scorer; fall back to GENERAL if all zero
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return best[1] > 0 ? best[0] : INTENT.GENERAL;
 }
 
 // Token budgets per intent — avoids over/under-spending
@@ -2047,7 +2085,7 @@ Explain in one sentence why each item ranks where it does. Do not include stalle
     [INTENT.REPORT]: `# CURRENT TASK
 Generate a structured project status report with these four sections:
 **Overview** — total tasks, breakdown by status, overdue count
-**Wins** — high-priority or previously-overdue tasks that are now done (not just any done task)
+**Wins** — high-priority tasks that are now done (these represent real progress worth calling out)
 **Risks** — overdue items, high-priority unstarted items, tasks due within 3 days; cite specific task titles
 **Recommendations** — exactly 3 specific, actionable next steps citing task names`,
 
@@ -2212,7 +2250,7 @@ Do NOT include generic observations. Be factual. Each bullet should be a single 
 //  Falls back to non-streaming on error.
 //  Returns the complete text when done.
 // ═══════════════════════════════════════════════
-async function callDeepSeekStream(userMsg, intent, contextOverride, onChunk) {
+async function callDeepSeekStream(userMsg, intent, contextOverride, tokenOverride, onChunk) {
   if (!cfg.dsKey) return null;
 
   const context = contextOverride || (
@@ -2242,7 +2280,7 @@ async function callDeepSeekStream(userMsg, intent, contextOverride, onChunk) {
       model: 'deepseek-chat',
       messages,
       temperature: [INTENT.REPORT, INTENT.ANALYZE, INTENT.RISK].includes(intent) ? 0.4 : 0.25,
-      max_tokens: tokenBudget(intent),
+      max_tokens: tokenOverride || tokenBudget(intent),
       stream: true,
     })
   });
@@ -2297,7 +2335,7 @@ async function callDeepSeekStream(userMsg, intent, contextOverride, onChunk) {
 //    contextOverride — optional context string (focused analysis)
 //    onDone       — optional callback after completion
 // ═══════════════════════════════════════════════
-async function executeChat({ userPrompt, displayText, intent, contextOverride = null, onDone = null }) {
+async function executeChat({ userPrompt, displayText, intent, contextOverride = null, onDone = null, tokenOverride = null }) {
   if (aiThinking) return;
 
   addChatMsg('user', displayText || userPrompt);
@@ -2318,7 +2356,7 @@ async function executeChat({ userPrompt, displayText, intent, contextOverride = 
 
     try {
       const raw = await callDeepSeekStream(
-        userPrompt, intent, contextOverride,
+        userPrompt, intent, contextOverride, tokenOverride,
         (partialText) => {
           // Update bubble live with each chunk, stripping ACTION block if present
           const displayable = stripActionBlock(partialText);
@@ -2496,8 +2534,10 @@ Be specific. Reference task titles. Do not just list overdue items — I can alr
 
   const displayText = `📊 Deep Analysis (${tasks.length} tasks)`;
 
-  // Use ANALYZE intent (not REPORT) — this produces insight, not a structured report
-  await executeChat({ userPrompt, displayText, intent: INTENT.ANALYZE });
+  // Use ANALYZE intent (not REPORT) — this produces insight, not a structured report.
+  // Pass tokenOverride: 1000 because the four-section format needs more room than
+  // the default 700-token ANALYZE budget.
+  await executeChat({ userPrompt, displayText, intent: INTENT.ANALYZE, tokenOverride: 1000 });
 }
 
 // ═══════════════════════════════════════════════
