@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -977,14 +976,18 @@ header {
     <div class="cfg-tab-pane" id="pane-gmail">
       <div class="info-box">
         <h4><i class="fab fa-google"></i> Gmail — OAuth 2.0 (PKCE)</h4>
-        <p>EvronAI uses Google's secure OAuth 2.0 PKCE flow — no backend server needed. Your credentials stay in your browser.</p>
+        <p>EvronAI uses Google's secure OAuth 2.0 PKCE flow — no backend server needed.</p>
         <ol>
-          <li>You need a Google Cloud project with the Gmail API enabled</li>
-          <li>Create OAuth 2.0 credentials → Web application</li>
-          <li>Add <code id="gm-redirect-uri"></code> as an Authorised redirect URI</li>
+          <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console → Credentials</a></li>
+          <li>Create OAuth 2.0 Client ID → Web application</li>
+          <li>Under <strong>Authorised redirect URIs</strong>, add this exact URI:</li>
+        </ol>
+        <div style="margin:10px 0;padding:10px 14px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent2);word-break:break-all;user-select:all" id="gm-redirect-uri">loading…</div>
+        <ol start="4">
+          <li>Enable the <strong>Gmail API</strong> in <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank">API Library</a></li>
           <li>Paste your Client ID below and click Connect Gmail</li>
         </ol>
-        <p style="margin-top:6px">Scopes requested: <code>gmail.readonly</code> — read-only access to fetch subjects and senders only.</p>
+        <p style="margin-top:8px;color:var(--warn);font-size:12px">⚠️ The URI above must be copied exactly — including <code>https://</code> and no trailing slash — into Google Cloud Console.</p>
       </div>
       <div class="form-group">
         <label class="form-label"><i class="fas fa-id-card"></i> Google OAuth Client ID</label>
@@ -1153,7 +1156,7 @@ function openConfig() {
   f('as-tok',    cfg.asTok);    f('as-ws',    cfg.asWs);
   // Show current redirect URI for Gmail setup
   const ru = document.getElementById('gm-redirect-uri');
-  if (ru) ru.textContent = location.origin + location.pathname;
+  if (ru) ru.textContent = getRedirectUri();
   // Show Gmail connection status
   updateGmailStatus();
   document.getElementById('cfg-overlay').classList.add('open');
@@ -2802,6 +2805,19 @@ function showNotifications() {
 // ═══════════════════════════════════════════════
 //  GMAIL OAUTH 2.0 PKCE
 // ═══════════════════════════════════════════════
+// Always use origin + pathname with no trailing slash except for root.
+// This must exactly match what's registered in Google Cloud Console.
+function getRedirectUri() {
+  const path = location.pathname.replace(/\/[^/]*\.[^/]+$/, '') || '/';
+  // If path ends in a filename (e.g. /index.html, /evronai.html), strip it
+  // so the URI is always the directory root — easiest to register in GCC.
+  return location.origin + (path === '/' ? '' : path) + '/';
+  // Examples:
+  // http://localhost:8080/evronai.html → http://localhost:8080/
+  // https://user.github.io/evronai/   → https://user.github.io/evronai/
+  // https://evronai.com/              → https://evronai.com/
+}
+
 function updateGmailStatus() {
   const statusEl = document.getElementById('gm-oauth-status');
   const revokeBtn = document.getElementById('gm-revoke-btn');
@@ -2825,7 +2841,7 @@ async function startGmailOAuth() {
   sessionStorage.setItem('gm_pkce_verifier', verifier);
   sessionStorage.setItem('gm_client_id', clientId);
 
-  const redirectUri = encodeURIComponent(location.origin + location.pathname);
+  const redirectUri = encodeURIComponent(getRedirectUri());
   const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly');
   const state = Math.random().toString(36).slice(2);
   sessionStorage.setItem('gm_oauth_state', state);
@@ -2857,7 +2873,7 @@ async function handleOAuthCallback() {
 
   const verifier  = sessionStorage.getItem('gm_pkce_verifier');
   const clientId  = sessionStorage.getItem('gm_client_id') || cfg.gmClientId;
-  const redirectUri = location.origin + location.pathname;
+  const redirectUri = getRedirectUri();
 
   try {
     const resp = await fetch('https://oauth2.googleapis.com/token', {
@@ -2969,8 +2985,7 @@ function revokeGmail() {
 }
 
 function cleanOAuthUrl() {
-  const url = location.origin + location.pathname;
-  history.replaceState({}, document.title, url);
+  history.replaceState({}, document.title, getRedirectUri());
 }
 
 // PKCE helpers
@@ -3096,6 +3111,10 @@ document.addEventListener('keydown', e => {
 
   // Handle Gmail OAuth callback (check URL params)
   if (location.search.includes('code=')) await handleOAuthCallback();
+
+  // Show Gmail redirect URI in settings pane so it's ready when user opens it
+  const ruEl = document.getElementById('gm-redirect-uri');
+  if (ruEl) ruEl.textContent = getRedirectUri();
 
   updateAPIStatus();
   updateStats();
