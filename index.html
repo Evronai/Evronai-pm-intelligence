@@ -265,31 +265,123 @@ header {
 .notif-badge.show { display: flex; }
 
 /* ── MOBILE RESPONSIVE ── */
+/* ═══════════════════════════════════════════════
+   MOBILE — complete responsive layout
+   Strategy: tab-based navigation on mobile.
+   Bottom nav switches between Tasks / AI / Sources.
+   No 3-panel stack — each panel gets full screen.
+═══════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .app { flex-direction: column; height: auto; min-height: calc(100vh - 58px); }
-  .sidebar { width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden;
-    border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-  .sidebar .ai-hero { display: none; } /* hide on mobile to save space */
-  .sidebar .sidebar-section { display: flex; flex-direction: row; padding: 8px 12px; gap: 4px; }
-  .sidebar .section-label { display: none; }
-  .src-row { flex-shrink: 0; padding: 6px 10px; white-space: nowrap; }
-  .src-row span:not(.src-count) { display: none; } /* icon only on mobile */
-  .add-src-btn { display: none; }
-  .main { flex: 1; overflow: hidden; }
-  .toolbar { padding: 8px 12px; gap: 6px; }
-  .search-wrap { max-width: 100%; }
-  .tb-btn span { display: none; } /* icon-only buttons on mobile */
-  .tb-btn { padding: 7px 10px; }
-  #sort-sel { display: none; }
-  .ai-panel { width: 100%; border-left: none; border-top: 1px solid var(--border);
-    height: 50vh; flex-shrink: 0; }
-  .tasks-area { padding: 12px; }
-  .tasks-grid { grid-template-columns: 1fr; }
-  .task-card .card-actions { opacity: 1; } /* always show on touch */
-}
-@media (max-width: 480px) {
+
+  /* ── Body & App ── */
+  body { overflow: auto; }
+  .app {
+    flex-direction: column;
+    height: calc(100vh - 58px);
+    position: relative;
+  }
+
+  /* ── Bottom tab bar ── */
+  .mobile-tabs {
+    display: flex;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 56px; z-index: 300;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .mobile-tab {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px;
+    font-size: 10px; font-weight: 700; color: var(--muted);
+    cursor: pointer; border: none; background: none;
+    font-family: 'Syne', sans-serif; transition: color 0.15s;
+  }
+  .mobile-tab i { font-size: 17px; }
+  .mobile-tab.active { color: var(--accent); }
+  .mobile-tab .tab-badge {
+    position: absolute; top: 6px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--danger); display: none;
+  }
+  .mobile-tab .tab-badge.show { display: block; }
+
+  /* ── Panel visibility ── */
+  .sidebar   { display: none; }
+  .main      { display: none; }
+  .ai-panel  { display: none; }
+
+  .sidebar.mobile-active,
+  .main.mobile-active,
+  .ai-panel.mobile-active {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: calc(100vh - 58px - 56px); /* viewport - header - tab bar */
+    overflow: hidden;
+  }
+
+  /* ── Sidebar as full-screen sources panel ── */
+  .sidebar.mobile-active {
+    overflow-y: auto;
+    border: none;
+    padding-bottom: 12px;
+  }
+  .sidebar .ai-hero { display: block; margin: 12px; }
+  .sidebar .sidebar-section { padding: 12px; }
+  .sidebar .section-label { display: block; }
+  .src-row { padding: 12px 14px; font-size: 14px; }
+  .src-row span:not(.src-count) { display: inline; }
+  .sync-time { display: inline; }
+  .add-src-btn { display: block; }
+
+  /* ── Main tasks panel ── */
+  .main.mobile-active {
+    overflow: hidden;
+  }
+  .toolbar {
+    padding: 8px 10px; gap: 6px;
+    flex-wrap: wrap; overflow-x: visible;
+  }
+  .search-wrap { flex: 1; min-width: 140px; max-width: 100%; }
+  .tb-btn { padding: 7px 10px; font-size: 11px; }
+  .tb-btn span { display: none; }
+  .tb-btn.primary span { display: inline; font-size: 11px; }
+  #sort-sel, #group-sel { font-size: 11px; padding: 6px 8px; }
+  .tasks-area { flex: 1; overflow-y: auto; padding: 10px; }
+  .tasks-grid { grid-template-columns: 1fr; gap: 10px; }
+  .task-card .card-actions { opacity: 1; }
+  .task-card { padding: 14px; }
+
+  /* ── AI panel ── */
+  .ai-panel.mobile-active {
+    overflow: hidden;
+  }
+  .chat-body { flex: 1; }
+
+  /* ── Modals full-screen on mobile ── */
+  .overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    width: 100% !important;
+    max-height: 90vh;
+    border-radius: 20px 20px 0 0;
+    overflow-y: auto;
+  }
+  .cfg-tabs { flex-wrap: wrap; gap: 4px; }
+  .cfg-tab { font-size: 10.5px; padding: 5px 10px; }
+
+  /* ── Header compact ── */
   header { padding: 0 12px; }
   .header-tag { display: none; }
+  .header-divider { display: none; }
+  .btn-connect { display: none; } /* replaced by Sources tab */
+}
+
+/* Hide mobile tabs on desktop */
+.mobile-tabs { display: none; }
+
+@media (max-width: 480px) {
+  .logo { font-size: 18px; }
+  .stat-num { font-size: 18px; }
 }
 
 /* ── TASKS ── */
@@ -863,7 +955,21 @@ header {
 
 </div>
 
-<!-- ADD TASK OVERLAY -->
+<!-- MOBILE BOTTOM TAB BAR -->
+<div class="mobile-tabs" id="mobile-tabs">
+  <button class="mobile-tab active" id="tab-tasks" onclick="switchMobileTab('tasks')">
+    <i class="fas fa-tasks"></i>
+    Tasks
+  </button>
+  <button class="mobile-tab" id="tab-ai" onclick="switchMobileTab('ai')">
+    <i class="fas fa-robot"></i>
+    AI
+  </button>
+  <button class="mobile-tab" id="tab-sources" onclick="switchMobileTab('sources')">
+    <i class="fas fa-plug"></i>
+    Sources
+  </button>
+</div>
 <div class="overlay" id="add-overlay" onclick="if(event.target===this)closeAddModal()">
   <div class="modal">
     <div class="modal-hdr">
@@ -3175,6 +3281,49 @@ function updateAllSyncTimes() {
 setInterval(updateAllSyncTimes, 60000);
 
 // ═══════════════════════════════════════════════
+//  MOBILE TAB NAVIGATION
+// ═══════════════════════════════════════════════
+function isMobile() { return window.innerWidth <= 768; }
+
+function switchMobileTab(tab) {
+  if (!isMobile()) return;
+
+  // Update tab button states
+  document.querySelectorAll('.mobile-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab)?.classList.add('active');
+
+  // Show/hide panels
+  const sidebar  = document.querySelector('.sidebar');
+  const main     = document.querySelector('.main');
+  const aiPanel  = document.querySelector('.ai-panel');
+
+  [sidebar, main, aiPanel].forEach(el => el?.classList.remove('mobile-active'));
+
+  if (tab === 'tasks')   main?.classList.add('mobile-active');
+  if (tab === 'ai')      aiPanel?.classList.add('mobile-active');
+  if (tab === 'sources') sidebar?.classList.add('mobile-active');
+}
+
+function initMobileLayout() {
+  if (!isMobile()) return;
+  // Show tasks panel by default
+  switchMobileTab('tasks');
+}
+
+// Re-evaluate on resize (e.g. rotation)
+window.addEventListener('resize', () => {
+  if (isMobile()) {
+    const activeTab = document.querySelector('.mobile-tab.active')?.id?.replace('tab-','') || 'tasks';
+    switchMobileTab(activeTab);
+  } else {
+    // Desktop — show all panels
+    document.querySelector('.sidebar')?.classList.remove('mobile-active');
+    document.querySelector('.main')?.classList.remove('mobile-active');
+    document.querySelector('.ai-panel')?.classList.remove('mobile-active');
+  }
+});
+
+// ═══════════════════════════════════════════════
 //  KEYBOARD SHORTCUTS
 // ═══════════════════════════════════════════════
 document.addEventListener('keydown', e => {
@@ -3205,6 +3354,7 @@ document.addEventListener('keydown', e => {
   updateAPIStatus();
   updateStats();
   renderTasks();
+  initMobileLayout();
 
   // Request notification permission silently on load
   requestNotifications();
