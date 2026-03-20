@@ -2257,8 +2257,12 @@ function processAIActions(text) {
     // action === 'none' — do nothing, just strip the block
   } catch(e) { console.warn('Action processing error:', e); }
 
-  // Remove the ACTION block from displayed text — always strip from end
-  return text.replace(raw, '').replace(/\n+$/, '').trim();
+  // Remove the ACTION block from displayed text
+  return text
+    .replace(/ACTION_JSON:\s*```[\s\S]*?```/gi, '')
+    .replace(/ACTION_JSON:\s*[\s\S]*/i, '')
+    .replace(/\n+$/, '')
+    .trim();
 }
 
 // ═══════════════════════════════════════════════
@@ -2551,9 +2555,9 @@ async function executeChat({ userPrompt, displayText, intent, contextOverride = 
 // so the user never sees raw JSON while it's being typed
 function stripActionBlock(text) {
   return text
-    .replace(/ACTION_JSON:\s*```[\s\S]*?```/g, '')
-    .replace(/ACTION_JSON:\s*\{[\s\S]*$/, '') // partial JSON at end — hide it
-    .replace(/ACTION_JSON:\s*\[[\s\S]*$/, '')
+    .replace(/ACTION_JSON:\s*```[\s\S]*?```/gi, '')
+    .replace(/ACTION_JSON:\s*[\{\[][\s\S]*$/i, '')  // catches both { and [ payloads from any point to end
+    .replace(/ACTION_JSON:\s*$/i, '')               // trailing label with no payload yet
     .trimEnd();
 }
 
