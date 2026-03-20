@@ -28,7 +28,6 @@
   --warn: #ffa502;
   --trello: #0079BF;
   --jira: #0052CC;
-  --gmail: #EA4335;
   --slack: #E01E5A;
   --monday: #F62F5E;
   --asana: #FC636B;
@@ -642,6 +641,46 @@ header {
 /* Sync spin */
 .spin { animation: spinAnim 0.8s linear infinite; display: inline-block; }
 @keyframes spinAnim { to { transform: rotate(360deg); } }
+
+/* Notes modal */
+.notes-entry { margin-bottom: 10px; padding: 10px 12px; background: var(--surface2); border-radius: 8px; border-left: 3px solid var(--accent); }
+.notes-ts { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 4px; }
+.notes-text { font-size: 13px; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
+.notes-empty { text-align: center; padding: 24px; color: var(--muted); font-size: 13px; }
+.note-count {
+  font-size: 9px; font-weight: 700; background: var(--accent-dim);
+  color: var(--accent); border-radius: 10px; padding: 1px 5px;
+  margin-left: 3px; vertical-align: middle;
+}
+
+/* Conflict badge */
+.conflict-badge {
+  font-size: 9px; font-weight: 700; color: var(--warn);
+  background: rgba(255,165,2,0.12); border-radius: 4px;
+  padding: 2px 5px; cursor: pointer;
+}
+
+/* Sync timestamps */
+.sync-time {
+  font-size: 9px; color: var(--muted); margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+/* Group view */
+.task-group { margin-bottom: 20px; }
+.group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 4px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer; user-select: none;
+}
+.group-title { font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.05em; }
+.group-count { font-size: 11px; color: var(--muted); }
+.group-toggle { color: var(--muted); font-size: 10px; margin-left: auto; transition: transform 0.2s; }
+.group-toggle.collapsed { transform: rotate(-90deg); }
+.group-tasks { }
+.group-tasks.collapsed { display: none; }
 </style>
 </head>
 <body>
@@ -685,31 +724,31 @@ header {
         <div class="src-dot" style="background:var(--trello)"></div>
         <span>Trello</span>
         <span style="font-size:9px;color:var(--muted);margin-left:2px" id="tr-board-count"></span>
+        <span class="sync-time" id="sync-time-trello"></span>
         <span class="src-count" id="cnt-trello">0</span>
       </div>
       <div class="src-row" data-src="jira" onclick="setFilter(this,'jira')">
         <div class="src-dot" style="background:var(--jira)"></div>
         <span>Jira</span>
+        <span class="sync-time" id="sync-time-jira"></span>
         <span class="src-count" id="cnt-jira">0</span>
-      </div>
-      <div class="src-row" data-src="gmail" onclick="setFilter(this,'gmail')">
-        <div class="src-dot" style="background:var(--gmail)"></div>
-        <span>Gmail</span>
-        <span class="src-count" id="cnt-gmail">0</span>
       </div>
       <div class="src-row" data-src="slack" onclick="setFilter(this,'slack')">
         <div class="src-dot" style="background:var(--slack)"></div>
         <span>Slack</span>
+        <span class="sync-time" id="sync-time-slack"></span>
         <span class="src-count" id="cnt-slack">0</span>
       </div>
       <div class="src-row" data-src="monday" onclick="setFilter(this,'monday')">
         <div class="src-dot" style="background:var(--monday)"></div>
         <span>Monday.com</span>
+        <span class="sync-time" id="sync-time-monday"></span>
         <span class="src-count" id="cnt-monday">0</span>
       </div>
       <div class="src-row" data-src="asana" onclick="setFilter(this,'asana')">
         <div class="src-dot" style="background:var(--asana)"></div>
         <span>Asana</span>
+        <span class="sync-time" id="sync-time-asana"></span>
         <span class="src-count" id="cnt-asana">0</span>
       </div>
       <div class="src-row" data-src="ai" onclick="setFilter(this,'ai')">
@@ -718,6 +757,12 @@ header {
         <span class="src-count" id="cnt-ai">0</span>
       </div>
       <button class="add-src-btn" onclick="openConfig()"><i class="fas fa-plus"></i> Add Integration</button>
+      <div style="padding:8px 4px 0;display:flex;align-items:center;justify-content:space-between">
+        <span id="last-synced-label" style="font-size:10px;color:var(--muted)">Never synced</span>
+        <span title="Conflict resolution: when sync finds a different version of a task you've edited locally" style="font-size:10px;color:var(--muted);cursor:pointer" onclick="toggleConflictMode()">
+          <i class="fas fa-code-branch"></i> <span id="conflict-mode-label">Local wins</span>
+        </span>
+      </div>
     </div>
   </aside>
 
@@ -745,6 +790,13 @@ header {
         <option value="status">Sort: Status</option>
         <option value="source">Sort: Source</option>
         <option value="title">Sort: Title A–Z</option>
+      </select>
+      <select id="group-sel" onchange="renderTasks()" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;cursor:pointer;outline:none;">
+        <option value="none">Group: None</option>
+        <option value="board">Group: Board</option>
+        <option value="source">Group: Source</option>
+        <option value="priority">Group: Priority</option>
+        <option value="status">Group: Status</option>
       </select>
       <div class="view-toggle">
         <button class="view-btn active" id="vg" onclick="setView('grid')" title="Grid"><i class="fas fa-th-large"></i></button>
@@ -832,11 +884,10 @@ header {
         <select class="form-select" id="t-src">
           <option value="trello">Trello</option>
           <option value="jira">Jira</option>
-          <option value="gmail">Gmail</option>
           <option value="slack">Slack</option>
           <option value="monday">Monday.com</option>
           <option value="asana">Asana</option>
-          <option value="ai">AI</option>
+          <option value="ai" selected>AI / Manual</option>
         </select>
       </div>
       <div>
@@ -869,6 +920,27 @@ header {
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeAddModal()">Cancel</button>
       <button class="btn-save" onclick="saveNewTask()">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTES MODAL -->
+<div class="overlay" id="notes-overlay" onclick="if(event.target===this)closeNotes()">
+  <div class="modal" style="width:520px;max-height:80vh;display:flex;flex-direction:column">
+    <div class="modal-hdr">
+      <div class="modal-title">📝 Notes — <span id="notes-task-title" style="color:var(--accent)"></span></div>
+      <button class="close-btn" onclick="closeNotes()">✕</button>
+    </div>
+    <div id="notes-list" style="flex:1;overflow-y:auto;padding:4px 0 16px;min-height:80px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:14px">
+      <textarea class="form-textarea" id="notes-input" rows="3"
+        placeholder="Add a note… (what happened, decisions made, blockers)"
+        style="margin-bottom:10px"
+        onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter'){event.preventDefault();submitNote()}"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--muted)">⌘↵ to save</span>
+        <button class="btn-save" onclick="submitNote()" style="padding:8px 20px">Add Note</button>
+      </div>
     </div>
   </div>
 </div>
@@ -917,7 +989,6 @@ header {
       <div class="cfg-tab active" onclick="switchCfgTab(this,'ds')"><i class="fas fa-brain"></i> DeepSeek AI</div>
       <div class="cfg-tab" onclick="switchCfgTab(this,'trello')"><i class="fab fa-trello"></i> Trello</div>
       <div class="cfg-tab" onclick="switchCfgTab(this,'jira')"><i class="fab fa-jira"></i> Jira</div>
-      <div class="cfg-tab" onclick="switchCfgTab(this,'gmail')"><i class="fab fa-google"></i> Gmail</div>
       <div class="cfg-tab" onclick="switchCfgTab(this,'slack')"><i class="fab fa-slack"></i> Slack</div>
       <div class="cfg-tab" onclick="switchCfgTab(this,'monday')"><i class="fas fa-calendar-alt"></i> Monday</div>
       <div class="cfg-tab" onclick="switchCfgTab(this,'asana')"><i class="fab fa-asana"></i> Asana</div>
@@ -970,39 +1041,6 @@ header {
       <div class="form-group"><label class="form-label">API Token</label><input type="password" class="form-input" id="ji-tok" placeholder="Your Jira API token"></div>
       <button class="tb-btn" style="margin-bottom:8px" onclick="testJira()"><i class="fas fa-plug"></i> Test Connection</button>
       <div id="ji-status" class="conn-status"></div>
-    </div>
-
-    <!-- Gmail -->
-    <div class="cfg-tab-pane" id="pane-gmail">
-      <div class="info-box">
-        <h4><i class="fab fa-google"></i> Gmail — OAuth 2.0 (PKCE)</h4>
-        <p>EvronAI uses Google's secure OAuth 2.0 PKCE flow — no backend server needed.</p>
-        <ol>
-          <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console → Credentials</a></li>
-          <li>Create OAuth 2.0 Client ID → Web application</li>
-          <li>Under <strong>Authorised redirect URIs</strong>, add this exact URI:</li>
-        </ol>
-        <div style="margin:10px 0;padding:10px 14px;background:var(--bg);border:1px solid var(--accent);border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent2);word-break:break-all;user-select:all" id="gm-redirect-uri">loading…</div>
-        <ol start="4">
-          <li>Enable the <strong>Gmail API</strong> in <a href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank">API Library</a></li>
-          <li>Paste your Client ID below and click Connect Gmail</li>
-        </ol>
-        <p style="margin-top:8px;color:var(--warn);font-size:12px">⚠️ The URI above must be copied exactly — including <code>https://</code> and no trailing slash — into Google Cloud Console.</p>
-      </div>
-      <div class="form-group">
-        <label class="form-label"><i class="fas fa-id-card"></i> Google OAuth Client ID</label>
-        <input class="form-input" id="gm-client-id" placeholder="xxxxxxxx.apps.googleusercontent.com">
-      </div>
-      <div id="gm-oauth-status" style="margin-bottom:12px"></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn-save" style="flex:1;padding:11px" onclick="startGmailOAuth()">
-          <i class="fab fa-google"></i> Connect Gmail
-        </button>
-        <button class="btn-cancel" onclick="revokeGmail()" id="gm-revoke-btn" style="display:none">
-          <i class="fas fa-times"></i> Disconnect
-        </button>
-      </div>
-      <div id="gm-status" class="conn-status" style="margin-top:10px"></div>
     </div>
 
     <!-- Slack -->
@@ -1150,15 +1188,9 @@ function openConfig() {
   f('ds-key',    cfg.dsKey);
   f('tr-key',    cfg.trKey);   f('tr-tok',   cfg.trTok);   f('tr-boards', cfg.trBoards);
   f('ji-domain', cfg.jiDomain); f('ji-email', cfg.jiEmail); f('ji-tok', cfg.jiTok);
-  f('gm-client-id', cfg.gmClientId);
   f('sl-tok',    cfg.slTok);    f('sl-ch',    cfg.slCh);
   f('mo-tok',    cfg.moTok);    f('mo-board', cfg.moBoard);
   f('as-tok',    cfg.asTok);    f('as-ws',    cfg.asWs);
-  // Show current redirect URI for Gmail setup
-  const ru = document.getElementById('gm-redirect-uri');
-  if (ru) ru.textContent = getRedirectUri();
-  // Show Gmail connection status
-  updateGmailStatus();
   document.getElementById('cfg-overlay').classList.add('open');
 }
 function closeConfig() { document.getElementById('cfg-overlay').classList.remove('open'); }
@@ -1173,15 +1205,9 @@ function switchCfgTab(el, pane) {
 async function saveConfig() {
   const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const newCfg = {
-    dsKey:      g('ds-key'),
-    trKey:      g('tr-key'),    trTok:    g('tr-tok'),   trBoards: g('tr-boards'),
-    jiDomain:   g('ji-domain'), jiEmail:  g('ji-email'), jiTok:    g('ji-tok'),
-    gmClientId: g('gm-client-id'),
-    // Preserve OAuth tokens — don't overwrite from form (they come from OAuth flow)
-    gmAccessToken:  cfg.gmAccessToken  || null,
-    gmRefreshToken: cfg.gmRefreshToken || null,
-    gmTokenExpiry:  cfg.gmTokenExpiry  || null,
-    gmEmail:        cfg.gmEmail        || null,
+    dsKey:    g('ds-key'),
+    trKey:    g('tr-key'),    trTok:    g('tr-tok'),   trBoards: g('tr-boards'),
+    jiDomain: g('ji-domain'), jiEmail:  g('ji-email'), jiTok:    g('ji-tok'),
     slTok:    g('sl-tok'),    slCh:     g('sl-ch'),
     moTok:    g('mo-tok'),    moBoard:  g('mo-board'),
     asTok:    g('as-tok'),    asWs:     g('as-ws'),
@@ -1221,16 +1247,6 @@ async function withAuthError(fn, el) {
       : '❌ ' + e.message;
     showConnStatus(el, false, msg);
   }
-}
-
-async function testGmail() {
-  const email = document.getElementById('gm-email').value.trim();
-  const pass  = document.getElementById('gm-pass').value.trim().replace(/\s/g, '');
-  const el    = document.getElementById('gm-status');
-  if (!email || !pass) { showConnStatus(el, false, 'Enter your Gmail address and App Password'); return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showConnStatus(el, false, 'Enter a valid email address'); return; }
-  if (pass.length !== 16) { showConnStatus(el, false, `App Password must be exactly 16 characters (got ${pass.length})`); return; }
-  showConnStatus(el, true, `✅ Credentials validated for ${email} — will sync on next Sync All`);
 }
 
 async function testTrello() {
@@ -1423,6 +1439,7 @@ async function syncAll() {
       }
 
       toast(`🟦 Trello: ${boards.length} board${boards.length !== 1 ? 's' : ''} synced`, 'ok');
+      recordSyncTime('trello');
     } catch(e) { errors.push('Trello: ' + e.message); }
   }
 
@@ -1459,17 +1476,7 @@ async function syncAll() {
         if (data.issues.length < maxResults) break;
       }
     } catch(e) { errors.push('Jira: ' + e.message); }
-  }
-
-  // GMAIL — real OAuth if token exists, else skip
-  if (cfg.gmAccessToken) {
-    try {
-      const gmTasks = await syncGmailReal();
-      gmTasks.forEach(t => {
-        if (!tasks.some(x => x.id === t.id)) { newTasks.push(t); fetched++; }
-      });
-      if (gmTasks.length) toast(`📧 Gmail: ${gmTasks.length} new email task${gmTasks.length > 1 ? 's' : ''}`, 'ok');
-    } catch(e) { errors.push('Gmail: ' + e.message); }
+    if (!errors.some(e => e.startsWith('Jira'))) recordSyncTime('jira');
   }
 
   // SLACK
@@ -1508,6 +1515,7 @@ async function syncAll() {
           fetched++;
         });
       }
+      recordSyncTime('slack');
     } catch(e) { errors.push('Slack: ' + e.message); }
   }
 
@@ -1526,22 +1534,26 @@ async function syncAll() {
       (data.data?.boards || []).forEach(b => {
         (b.items_page?.items || []).forEach(item => {
           const id = 'mo-' + item.id;
-          if (tasks.some(t => t.id === id)) return;
+          const existing = tasks.find(t => t.id === id);
           const dueCol = item.column_values?.find(c => c.id === 'due_date' || c.id === 'date4');
           const priCol = item.column_values?.find(c => c.id === 'priority' || c.id === 'status');
           const pri = priCol?.text?.toLowerCase().includes('high') ? 'high'
                     : priCol?.text?.toLowerCase().includes('low')  ? 'low' : 'medium';
-          newTasks.push({
-            id, source:'monday',
-            title: item.name,
+          const remoteFields = {
+            source:'monday', title: item.name,
             description: item.column_values?.map(c => c.text).filter(Boolean).join(' · ') || '',
             priority: pri,
             status: item.state === 'done' ? 'done' : item.state === 'active' ? 'in_progress' : 'todo',
             board: b.name, due: dueCol?.text || null
-          });
-          fetched++;
+          };
+          if (existing) {
+            resolveTaskConflict(existing, remoteFields);
+          } else {
+            newTasks.push({ id, ...remoteFields }); fetched++;
+          }
         });
       });
+      recordSyncTime('monday');
     } catch(e) { errors.push('Monday: ' + e.message); }
   }
 
@@ -1566,19 +1578,26 @@ async function syncAll() {
         const d = await r.json();
         (d.data || []).forEach(t => {
           const id = 'as-' + t.gid;
-          if (tasks.some(tk => tk.id === id)) return;
+          const existing = tasks.find(tk => tk.id === id);
           const projectName = t.memberships?.[0]?.project?.name || 'Asana';
-          newTasks.push({ id, source:'asana', title:t.name, description:t.notes||'', priority:'medium', status: t.completed ? 'done' : 'todo', board: projectName, due: t.due_on || null });
-          fetched++;
+          const remoteFields = { source:'asana', title:t.name, description:t.notes||'', priority:'medium', status: t.completed ? 'done' : 'todo', board: projectName, due: t.due_on || null };
+          if (existing) {
+            resolveTaskConflict(existing, remoteFields);
+          } else {
+            newTasks.push({ id, ...remoteFields }); fetched++;
+          }
         });
         offset = d.next_page?.offset;
         fetching = !!(offset && d.data?.length === 25 && fetched < 100);
       }
+      recordSyncTime('asana');
     } catch(e) { errors.push('Asana: ' + e.message); }
   }
 
   // Results
+  const conflicts = tasks.filter(t => t._conflict).length;
   if (errors.length) errors.forEach(e => toast('⚠️ ' + e, 'err'));
+  if (conflicts) toast(`⚡ ${conflicts} sync conflict${conflicts > 1 ? 's' : ''} — click the ⚡ badge to resolve`, 'info');
   if (fetched === 0 && tasks.length === 0) {
     tasks = getDemoTasks();
     toast('📋 Demo tasks loaded — configure integrations for real data', 'info');
@@ -1588,7 +1607,7 @@ async function syncAll() {
     else if (!errors.length) toast('✅ Up to date — no new tasks', 'info');
   }
 
-  saveTasks(); updateStats(); renderTasks();
+  saveTasks(); updateStats(); renderTasks(); updateAllSyncTimes();
   btn.disabled = false;
   icon.className = 'fas fa-sync-alt';
 }
@@ -1599,7 +1618,7 @@ function getDemoTasks() {
   return [
     { id:'d1', source:'trello', title:'Design new user onboarding flow', description:'Create wireframes and user journey for new registrations', priority:'high', status:'in_progress', board:'Product Design', due: dd(3) },
     { id:'d2', source:'jira',   title:'[AUTH-123] Implement OAuth2 authentication', description:'Add Google and GitHub OAuth providers to the auth service', priority:'high', status:'todo', board:'Backend', due: dd(-1) },
-    { id:'d3', source:'gmail',  title:'Client: Q4 project timeline review', description:'Please review the attached timeline and provide feedback by Friday', priority:'high', status:'todo', board:'Client Communications', due: dd(2) },
+    { id:'d3', source:'ai',     title:'Client: Q4 project timeline review', description:'Please review the attached timeline and provide feedback by Friday', priority:'high', status:'todo', board:'Client Communications', due: dd(2) },
     { id:'d4', source:'slack',  title:'#dev: Production deployment discussion', description:'Team discussing v2.3 deployment strategy and rollback plan', priority:'medium', status:'in_progress', board:'Development', due: null },
     { id:'d5', source:'monday', title:'Q4 Marketing Campaign Launch', description:'Coordinate social, email, and paid channels for October launch', priority:'medium', status:'todo', board:'Marketing', due: dd(14) },
     { id:'d6', source:'asana',  title:'API documentation update', description:'Update all endpoint docs to reflect v3 changes', priority:'low', status:'done', board:'Docs', due: dd(-5) },
@@ -1629,6 +1648,7 @@ function saveNewTask() {
     status:   document.getElementById('t-status').value,
     board:    document.getElementById('t-board').value.trim() || 'General',
     due:      document.getElementById('t-due').value || null,
+    notes:    [],
   });
   ['t-title','t-desc','t-board','t-due'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   closeAddModal(); saveTasks(); updateStats(); renderTasks();
@@ -1700,15 +1720,18 @@ const PRI_ORDER = { high:0, medium:1, low:2 };
 const ST_ORDER  = { todo:0, in_progress:1, done:2 };
 
 function renderTasks() {
-  const q    = document.getElementById('q').value.toLowerCase();
-  const sort = document.getElementById('sort-sel')?.value || 'default';
+  const q     = document.getElementById('q').value.toLowerCase();
+  const sort  = document.getElementById('sort-sel')?.value  || 'default';
+  const group = document.getElementById('group-sel')?.value || 'none';
 
   let vis = tasks.filter(t => {
     if (filter !== 'all' && t.source !== filter) return false;
     if (!q) return true;
+    const notesText = (t.notes||[]).map(n=>n.text).join(' ');
     return t.title.toLowerCase().includes(q) ||
            (t.description||'').toLowerCase().includes(q) ||
-           (t.board||'').toLowerCase().includes(q);
+           (t.board||'').toLowerCase().includes(q) ||
+           notesText.toLowerCase().includes(q);
   });
 
   if (sort === 'priority') vis = [...vis].sort((a,b) => (PRI_ORDER[a.priority]??1) - (PRI_ORDER[b.priority]??1));
@@ -1716,7 +1739,6 @@ function renderTasks() {
   else if (sort === 'source') vis = [...vis].sort((a,b) => a.source.localeCompare(b.source));
   else if (sort === 'title')  vis = [...vis].sort((a,b) => a.title.localeCompare(b.title));
   else {
-    // Default: overdue first, then high priority, then rest
     vis = [...vis].sort((a,b) => {
       const aOver = a.due && isOverdue(a.due) && a.status !== 'done' ? 0 : 1;
       const bOver = b.due && isOverdue(b.due) && b.status !== 'done' ? 0 : 1;
@@ -1735,11 +1757,52 @@ function renderTasks() {
     return;
   }
 
-  if (viewMode === 'grid') {
-    c.innerHTML = vis.map(t => cardHTML(t)).join('');
+  if (group !== 'none') {
+    // Grouped view
+    const getGroupKey = t => {
+      if (group === 'board')    return t.board || 'No Board';
+      if (group === 'source')   return t.source.toUpperCase();
+      if (group === 'priority') return t.priority.charAt(0).toUpperCase() + t.priority.slice(1) + ' Priority';
+      if (group === 'status')   return t.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+      return 'Other';
+    };
+    const groups = {};
+    vis.forEach(t => {
+      const k = getGroupKey(t);
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(t);
+    });
+    const groupKeys = Object.keys(groups).sort();
+    c.className = 'tasks-area-inner'; // no grid — groups handle layout
+    c.innerHTML = groupKeys.map(key => {
+      const gid = 'grp-' + key.replace(/\W/g, '_');
+      const items = groups[key];
+      const inner = viewMode === 'grid'
+        ? `<div class="tasks-grid">${items.map(t => cardHTML(t)).join('')}</div>`
+        : `<div class="tasks-list">${items.map(t => rowHTML(t)).join('')}</div>`;
+      return `
+      <div class="task-group">
+        <div class="group-header" onclick="toggleGroup('${gid}')">
+          <span class="group-title">${esc(key)}</span>
+          <span class="group-count">${items.length} task${items.length!==1?'s':''}</span>
+          <i class="fas fa-chevron-down group-toggle" id="${gid}-toggle"></i>
+        </div>
+        <div class="group-tasks" id="${gid}-tasks">${inner}</div>
+      </div>`;
+    }).join('');
   } else {
-    c.innerHTML = vis.map(t => rowHTML(t)).join('');
+    // Flat view
+    c.className = viewMode === 'grid' ? 'tasks-grid' : 'tasks-list';
+    c.innerHTML = vis.map(t => viewMode === 'grid' ? cardHTML(t) : rowHTML(t)).join('');
   }
+}
+
+function toggleGroup(gid) {
+  const tasks = document.getElementById(gid + '-tasks');
+  const toggle = document.getElementById(gid + '-toggle');
+  if (!tasks) return;
+  tasks.classList.toggle('collapsed');
+  toggle?.classList.toggle('collapsed');
 }
 
 function dueBadge(due, status) {
@@ -1755,12 +1818,15 @@ function dueBadge(due, status) {
 function safeId(id) { return id.replace(/['"\\]/g, ''); }
 
 function cardHTML(t) {
-  const id  = safeId(t.id);
-  const due = dueBadge(t.due, t.status);
+  const id       = safeId(t.id);
+  const due      = dueBadge(t.due, t.status);
+  const noteCount = (t.notes||[]).length;
+  const conflict  = t._conflict ? `<span class="conflict-badge" onclick="resolveConflict('${id}')" title="Sync conflict — click to resolve">⚡ Conflict</span>` : '';
   return `
-  <div class="task-card" data-id="${esc(t.id)}">
+  <div class="task-card${t._conflict ? ' conflict' : ''}" data-id="${esc(t.id)}">
     <div class="card-actions">
-      <button class="ca-btn" onclick="startEdit('${id}')" title="Edit (click title to edit inline)"><i class="fas fa-pen"></i></button>
+      <button class="ca-btn" onclick="openNotes('${id}')" title="Notes${noteCount ? ' ('+noteCount+')' : ''}"><i class="fas fa-sticky-note"></i></button>
+      <button class="ca-btn" onclick="startEdit('${id}')" title="Edit"><i class="fas fa-pen"></i></button>
       <button class="ca-btn" onclick="aiAnalyzeTask('${id}')" title="AI Analyze" id="aibtn-${id}"><i class="fas fa-robot"></i></button>
       <button class="ca-btn danger" onclick="deleteTask('${id}')" title="Delete"><i class="fas fa-trash"></i></button>
     </div>
@@ -1770,24 +1836,30 @@ function cardHTML(t) {
       <span class="pri-badge ${t.priority}">${t.priority}</span>
       <span class="status-pill ${t.status}" onclick="cycleStatus('${id}')" title="Click to cycle status">${t.status.replace('_',' ')}</span>
       ${due}
+      ${conflict}
     </div>
     ${t.description ? `<div class="card-desc">${esc(t.description).substring(0,110)}${t.description.length>110?'…':''}</div>` : ''}
+    ${noteCount ? `<div class="card-board" style="color:var(--accent)">📝 ${noteCount} note${noteCount>1?'s':''}</div>` : ''}
     ${t.board ? `<div class="card-board">📌 ${esc(t.board)}</div>` : ''}
   </div>`;
 }
 
 function rowHTML(t) {
-  const id  = safeId(t.id);
-  const due = dueBadge(t.due, t.status);
+  const id        = safeId(t.id);
+  const due       = dueBadge(t.due, t.status);
+  const noteCount = (t.notes||[]).length;
+  const conflict  = t._conflict ? `<span class="conflict-badge" onclick="resolveConflict('${id}')">⚡</span>` : '';
   return `
   <div class="task-row" data-id="${esc(t.id)}">
     <span class="src-badge ${t.source}" style="margin:0;flex-shrink:0">${srcIcon(t.source)}</span>
     <span class="pri-badge ${t.priority}" style="flex-shrink:0">${t.priority}</span>
-    <div class="card-title" style="flex:1;min-width:0">${esc(t.title)}</div>
+    <div class="card-title" style="flex:1;min-width:0">${esc(t.title)}${noteCount ? `<span class="note-count">${noteCount}</span>` : ''}</div>
     ${due}
+    ${conflict}
     <span class="status-pill ${t.status}" onclick="cycleStatus('${id}')">${t.status.replace('_',' ')}</span>
     ${t.board ? `<span style="font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap">📌 ${esc(t.board)}</span>` : ''}
     <div class="card-actions" style="opacity:1;position:relative;top:auto;right:auto">
+      <button class="ca-btn" onclick="openNotes('${id}')"><i class="fas fa-sticky-note"></i></button>
       <button class="ca-btn" onclick="startEdit('${id}')"><i class="fas fa-pen"></i></button>
       <button class="ca-btn" onclick="aiAnalyzeTask('${id}')" id="aibtn-${id}"><i class="fas fa-robot"></i></button>
       <button class="ca-btn danger" onclick="deleteTask('${id}')"><i class="fas fa-trash"></i></button>
@@ -1796,7 +1868,7 @@ function rowHTML(t) {
 }
 
 function updateStats() {
-  ['all','trello','jira','gmail','slack','monday','asana','ai'].forEach(s => {
+  ['all','trello','jira','slack','monday','asana','ai'].forEach(s => {
     const el = document.getElementById('cnt-' + s);
     if (el) el.textContent = s === 'all' ? tasks.length : tasks.filter(t => t.source === s).length;
   });
@@ -1935,8 +2007,9 @@ function buildFullContext() {
       : daysUntilDue(t.due) <= 3 ? ` [DUE IN ${daysUntilDue(t.due)}d]`
       : ` [due:${t.due}]`
       : '';
-    const desc = t.description ? ` | Note: ${t.description.substring(0, 80)}${t.description.length > 80 ? '…' : ''}` : '';
-    return `• [${t.source.toUpperCase()}][${t.priority.toUpperCase()}][${t.status.replace('_',' ').toUpperCase()}] "${t.title}" — ${t.board||'No board'}${dueFlag}${desc}`;
+    const desc  = t.description ? ` | Desc: ${t.description.substring(0, 60)}${t.description.length > 60 ? '…' : ''}` : '';
+    const notes = (t.notes||[]).length ? ` | Notes(${t.notes.length}): ${t.notes.slice(-1)[0]?.text?.substring(0,60)}…` : '';
+    return `• [${t.source.toUpperCase()}][${t.priority.toUpperCase()}][${t.status.replace('_',' ').toUpperCase()}] "${t.title}" — ${t.board||'No board'}${dueFlag}${desc}${notes}`;
   });
 
   return header + '\n\n=== ALL TASKS (priority-sorted) ===\n' + taskLines.join('\n')
@@ -1979,7 +2052,8 @@ function buildFocusedContext(taskId, relatedCount = 6) {
     `Priority: ${target.priority} | Status: ${target.status.replace('_',' ')}`,
     `Due: ${target.due || 'none'} (${dueFlag})`,
     `Description: ${target.description || 'none'}`,
-  ].join('\n');
+    (target.notes||[]).length ? `Notes (${target.notes.length}):\n${target.notes.slice(-3).map(n => `  [${new Date(n.ts).toLocaleDateString()}] ${n.text}`).join('\n')}` : null,
+  ].filter(Boolean).join('\n');
 
   const relatedBlock = related.length
     ? '\n\n=== RELATED TASKS (ranked by relevance — same board/priority) ===\n' +
@@ -2581,7 +2655,7 @@ function esc(str) {
 
 function srcIcon(src) {
   return ({ trello:'<i class="fab fa-trello"></i>', jira:'<i class="fab fa-jira"></i>',
-    gmail:'<i class="fab fa-google"></i>', slack:'<i class="fab fa-slack"></i>',
+    slack:'<i class="fab fa-slack"></i>',
     monday:'<i class="fas fa-calendar-alt"></i>', asana:'<i class="fab fa-asana"></i>',
     ai:'<i class="fas fa-robot"></i>' })[src] || '<i class="fas fa-tasks"></i>';
 }
@@ -2802,200 +2876,6 @@ function showNotifications() {
   toast(msgs.join(' · '), 'info');
 }
 
-// ═══════════════════════════════════════════════
-//  GMAIL OAUTH 2.0 PKCE
-// ═══════════════════════════════════════════════
-// Always use origin + pathname with no trailing slash except for root.
-// This must exactly match what's registered in Google Cloud Console.
-function getRedirectUri() {
-  // Use the exact current URL minus query string and hash.
-  // For GitHub Pages: https://evronai.github.io/Evronai-pm-intelligence/
-  // For local file:   http://localhost:8080/evronai.html
-  // Google requires this to exactly match what's registered in Cloud Console.
-  return location.origin + location.pathname;
-}
-
-function updateGmailStatus() {
-  const statusEl = document.getElementById('gm-oauth-status');
-  const revokeBtn = document.getElementById('gm-revoke-btn');
-  if (!statusEl) return;
-  if (cfg.gmAccessToken && cfg.gmEmail) {
-    statusEl.innerHTML = `<div style="color:var(--accent2);font-size:12px;font-weight:600;padding:8px 12px;background:rgba(0,212,170,0.1);border-radius:6px">✅ Connected as ${cfg.gmEmail}</div>`;
-    if (revokeBtn) revokeBtn.style.display = 'block';
-  } else {
-    statusEl.innerHTML = '';
-    if (revokeBtn) revokeBtn.style.display = 'none';
-  }
-}
-
-async function startGmailOAuth() {
-  const clientId = document.getElementById('gm-client-id')?.value.trim();
-  if (!clientId) { toast('Enter your Google OAuth Client ID first', 'err'); return; }
-
-  // Generate PKCE code verifier and challenge
-  const verifier = generateCodeVerifier();
-  const challenge = await generateCodeChallenge(verifier);
-  sessionStorage.setItem('gm_pkce_verifier', verifier);
-  sessionStorage.setItem('gm_client_id', clientId);
-
-  const redirectUri = encodeURIComponent(getRedirectUri());
-  const scope = encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly');
-  const state = Math.random().toString(36).slice(2);
-  sessionStorage.setItem('gm_oauth_state', state);
-
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-    `client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code` +
-    `&scope=${scope}&state=${state}&code_challenge=${challenge}` +
-    `&code_challenge_method=S256&access_type=offline&prompt=consent`;
-
-  // Save client ID to config immediately
-  cfg.gmClientId = clientId;
-  const encrypted = await encryptCfg(cfg);
-  localStorage.setItem(STORE_KEY, encrypted);
-
-  window.location.href = authUrl;
-}
-
-async function handleOAuthCallback() {
-  const params = new URLSearchParams(location.search);
-  const code   = params.get('code');
-  const state  = params.get('state');
-  const error  = params.get('error');
-
-  if (error) { toast('Gmail OAuth denied: ' + error, 'err'); cleanOAuthUrl(); return; }
-  if (!code)  return; // not an OAuth callback
-
-  const savedState = sessionStorage.getItem('gm_oauth_state');
-  if (state !== savedState) { toast('OAuth state mismatch — possible CSRF', 'err'); cleanOAuthUrl(); return; }
-
-  const verifier  = sessionStorage.getItem('gm_pkce_verifier');
-  const clientId  = sessionStorage.getItem('gm_client_id') || cfg.gmClientId;
-  const redirectUri = getRedirectUri();
-
-  try {
-    const resp = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code, client_id: clientId, redirect_uri: redirectUri,
-        code_verifier: verifier, grant_type: 'authorization_code'
-      })
-    });
-    const tokens = await resp.json();
-    if (!resp.ok) throw new Error(tokens.error_description || 'Token exchange failed');
-
-    // Fetch user email
-    const profileResp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { 'Authorization': `Bearer ${tokens.access_token}` }
-    });
-    const profile = await profileResp.json();
-
-    cfg.gmAccessToken  = tokens.access_token;
-    cfg.gmRefreshToken = tokens.refresh_token || cfg.gmRefreshToken;
-    cfg.gmTokenExpiry  = Date.now() + (tokens.expires_in * 1000);
-    cfg.gmEmail        = profile.email;
-    cfg.gmClientId     = clientId;
-
-    const encrypted = await encryptCfg(cfg);
-    localStorage.setItem(STORE_KEY, encrypted);
-    sessionStorage.removeItem('gm_pkce_verifier');
-    sessionStorage.removeItem('gm_oauth_state');
-    toast(`✅ Gmail connected: ${profile.email}`, 'ok');
-  } catch(e) {
-    toast('Gmail OAuth failed: ' + e.message, 'err');
-  }
-  cleanOAuthUrl();
-}
-
-async function refreshGmailToken() {
-  if (!cfg.gmRefreshToken || !cfg.gmClientId) return false;
-  if (cfg.gmTokenExpiry && Date.now() < cfg.gmTokenExpiry - 60000) return true; // still valid
-  try {
-    const resp = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        refresh_token: cfg.gmRefreshToken,
-        client_id: cfg.gmClientId,
-        grant_type: 'refresh_token'
-      })
-    });
-    const tokens = await resp.json();
-    if (!resp.ok) throw new Error(tokens.error);
-    cfg.gmAccessToken  = tokens.access_token;
-    cfg.gmTokenExpiry  = Date.now() + (tokens.expires_in * 1000);
-    const encrypted = await encryptCfg(cfg);
-    localStorage.setItem(STORE_KEY, encrypted);
-    return true;
-  } catch { return false; }
-}
-
-async function syncGmail() {
-  if (!cfg.gmAccessToken) return [];
-  const valid = await refreshGmailToken();
-  if (!valid) { toast('⚠️ Gmail token expired — reconnect in Connect Sources', 'err'); return []; }
-
-  // Fetch unread emails from INBOX via Gmail REST API
-  const listResp = await fetchWithRetry(
-    'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&labelIds=INBOX&q=is:unread',
-    { headers: { 'Authorization': `Bearer ${cfg.gmAccessToken}` } }
-  );
-  if (!listResp.ok) throw new Error(`Gmail API ${listResp.status}`);
-  const list = await listResp.json();
-  const messages = list.messages || [];
-
-  const emailTasks = [];
-  for (const msg of messages.slice(0, 10)) {
-    const msgResp = await fetchWithRetry(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-      { headers: { 'Authorization': `Bearer ${cfg.gmAccessToken}` } }
-    );
-    if (!msgResp.ok) continue;
-    const data   = await msgResp.json();
-    const headers = data.payload?.headers || [];
-    const subject = headers.find(h => h.name === 'Subject')?.value || '(no subject)';
-    const from    = headers.find(h => h.name === 'From')?.value    || 'Unknown sender';
-    const date    = headers.find(h => h.name === 'Date')?.value    || '';
-    const id      = 'gm-' + msg.id;
-    if (tasks.some(t => t.id === id)) continue;
-    const isUrgent = /urgent|asap|important|action required|deadline/i.test(subject);
-    emailTasks.push({
-      id, source: 'gmail',
-      title: subject.substring(0, 100),
-      description: `From: ${from}${date ? ' · ' + new Date(date).toLocaleDateString() : ''}`,
-      priority: isUrgent ? 'high' : 'medium',
-      status: 'todo',
-      board: 'Gmail Inbox',
-      due: null
-    });
-  }
-  return emailTasks;
-}
-
-function revokeGmail() {
-  if (!confirm('Disconnect Gmail? You will need to reconnect to sync emails.')) return;
-  cfg.gmAccessToken = null; cfg.gmRefreshToken = null;
-  cfg.gmTokenExpiry = null; cfg.gmEmail = null;
-  encryptCfg(cfg).then(enc => localStorage.setItem(STORE_KEY, enc));
-  updateGmailStatus();
-  toast('Gmail disconnected', 'info');
-}
-
-function cleanOAuthUrl() {
-  history.replaceState({}, document.title, getRedirectUri());
-}
-
-// PKCE helpers
-function generateCodeVerifier() {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
-}
-async function generateCodeChallenge(verifier) {
-  const data = new TextEncoder().encode(verifier);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
-}
 
 // ═══════════════════════════════════════════════
 //  SHARE / EXPORT / IMPORT
@@ -3066,17 +2946,158 @@ function importFromFile(input) {
   reader.readAsText(file);
 }
 
-// Also update Gmail sync in syncAll to use real OAuth
-async function syncGmailReal() {
-  if (!cfg.gmAccessToken) return [];
-  try {
-    const result = await syncGmail();
-    return result;
-  } catch(e) {
-    toast('⚠️ Gmail sync failed: ' + e.message, 'err');
-    return [];
+}
+
+// ═══════════════════════════════════════════════
+//  FEATURE 1: TASK NOTES
+//  Append-only timestamped notes per task.
+//  Notes persist in task.notes = [{ts, text}]
+//  Searchable, visible in AI context.
+// ═══════════════════════════════════════════════
+let activeNoteTaskId = null;
+
+function openNotes(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  activeNoteTaskId = id;
+  document.getElementById('notes-task-title').textContent = t.title.substring(0, 40) + (t.title.length > 40 ? '…' : '');
+  renderNotesList(t);
+  document.getElementById('notes-input').value = '';
+  document.getElementById('notes-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('notes-input').focus(), 100);
+}
+
+function closeNotes() {
+  document.getElementById('notes-overlay').classList.remove('open');
+  activeNoteTaskId = null;
+}
+
+function renderNotesList(t) {
+  const list = document.getElementById('notes-list');
+  const notes = t.notes || [];
+  if (!notes.length) {
+    list.innerHTML = `<div class="notes-empty">No notes yet.<br>Add context, decisions, or blockers below.</div>`;
+    return;
+  }
+  // Newest first
+  list.innerHTML = [...notes].reverse().map(n => `
+    <div class="notes-entry">
+      <div class="notes-ts">${new Date(n.ts).toLocaleString()}</div>
+      <div class="notes-text">${esc(n.text)}</div>
+    </div>`).join('');
+}
+
+function submitNote() {
+  const input = document.getElementById('notes-input');
+  const text  = input.value.trim();
+  if (!text || !activeNoteTaskId) return;
+  const t = tasks.find(x => x.id === activeNoteTaskId);
+  if (!t) return;
+  if (!t.notes) t.notes = [];
+  t.notes.push({ ts: Date.now(), text });
+  saveTasks(); renderTasks();
+  renderNotesList(t);
+  input.value = '';
+  input.focus();
+  toast('📝 Note added', 'ok');
+}
+
+// ═══════════════════════════════════════════════
+//  FEATURE 2: SYNC CONFLICT RESOLUTION
+//  When sync finds a remote task that differs from
+//  a locally-edited version, flag it rather than
+//  silently overwriting.
+// ═══════════════════════════════════════════════
+let conflictMode = 'local'; // 'local' = local wins, 'remote' = remote wins
+
+function toggleConflictMode() {
+  conflictMode = conflictMode === 'local' ? 'remote' : 'local';
+  const label = document.getElementById('conflict-mode-label');
+  if (label) label.textContent = conflictMode === 'local' ? 'Local wins' : 'Remote wins';
+  toast(`🔀 Conflict resolution: ${conflictMode} wins`, 'info');
+}
+
+// Call this inside syncAll when a remote task already exists locally
+// Returns true if the task should be updated, false if it should be skipped
+function resolveTaskConflict(localTask, remoteFields) {
+  // Detect meaningful differences (status, priority, title)
+  const differs = localTask.status   !== remoteFields.status   ||
+                  localTask.priority !== remoteFields.priority  ||
+                  localTask.title    !== remoteFields.title;
+
+  if (!differs) return true; // no conflict — safe to update
+
+  if (conflictMode === 'remote') {
+    // Overwrite local with remote, preserve notes
+    Object.assign(localTask, remoteFields, { notes: localTask.notes });
+    localTask._conflict = false;
+    return true;
+  } else {
+    // Local wins — flag conflict but don't overwrite
+    localTask._conflict = true;
+    localTask._remoteSnapshot = { ...remoteFields };
+    return false;
   }
 }
+
+function resolveConflict(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t || !t._conflict) return;
+  const remote = t._remoteSnapshot;
+
+  const msg = `Conflict on "${t.title}"\n\nLocal:  ${t.status} / ${t.priority}\nRemote: ${remote.status} / ${remote.priority}\n\nKeep local version?`;
+  if (confirm(msg)) {
+    // Keep local
+    t._conflict = false;
+    delete t._remoteSnapshot;
+  } else {
+    // Take remote
+    Object.assign(t, remote, { notes: t.notes });
+    t._conflict = false;
+    delete t._remoteSnapshot;
+  }
+  saveTasks(); renderTasks();
+  toast('✅ Conflict resolved', 'ok');
+}
+
+// ═══════════════════════════════════════════════
+//  FEATURE 3: LAST-SYNCED TIMESTAMPS
+// ═══════════════════════════════════════════════
+const syncTimes = {};
+
+function recordSyncTime(source) {
+  syncTimes[source] = Date.now();
+  updateSyncTimeDisplay(source);
+}
+
+function updateSyncTimeDisplay(source) {
+  const el = document.getElementById('sync-time-' + source);
+  if (!el || !syncTimes[source]) return;
+  const diffMs  = Date.now() - syncTimes[source];
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffH   = Math.floor(diffMs / 3600000);
+  let label;
+  if (diffMin < 1)   label = 'just now';
+  else if (diffMin < 60) label = diffMin + 'm';
+  else if (diffH < 24)   label = diffH + 'h';
+  else                   label = Math.floor(diffH/24) + 'd';
+  el.textContent = label;
+}
+
+function updateAllSyncTimes() {
+  ['trello','jira','slack','monday','asana'].forEach(s => updateSyncTimeDisplay(s));
+  // Update global last-synced label
+  const times = Object.values(syncTimes);
+  if (times.length) {
+    const latest = Math.max(...times);
+    const diffMin = Math.floor((Date.now() - latest) / 60000);
+    const label = document.getElementById('last-synced-label');
+    if (label) label.textContent = diffMin < 1 ? 'Synced just now' : `Synced ${diffMin}m ago`;
+  }
+}
+
+// Refresh displayed times every minute
+setInterval(updateAllSyncTimes, 60000);
 
 // ═══════════════════════════════════════════════
 //  KEYBOARD SHORTCUTS
@@ -3086,7 +3107,7 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); document.getElementById('q').focus(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); openAddModal(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'e') { e.preventDefault(); openShareModal(); }
-  if (e.key === 'Escape') { closeAddModal(); closeConfig(); closeShareModal(); }
+  if (e.key === 'Escape') { closeAddModal(); closeConfig(); closeShareModal(); closeNotes(); }
   if (!inInput && e.key === '/') { e.preventDefault(); document.getElementById('q').focus(); }
 });
 
@@ -3105,13 +3126,6 @@ document.addEventListener('keydown', e => {
 
   // Seed seenTaskIds with existing tasks so we don't notify for old ones
   tasks.forEach(t => seenTaskIds.add(t.id));
-
-  // Handle Gmail OAuth callback (check URL params)
-  if (location.search.includes('code=')) await handleOAuthCallback();
-
-  // Show Gmail redirect URI in settings pane so it's ready when user opens it
-  const ruEl = document.getElementById('gm-redirect-uri');
-  if (ruEl) ruEl.textContent = getRedirectUri();
 
   updateAPIStatus();
   updateStats();
