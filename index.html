@@ -1954,7 +1954,7 @@ function tokenBudget(intent) {
   return {
     [INTENT.ADD]:        300,
     [INTENT.DELETE]:     200,
-    [INTENT.UPDATE]:     250,
+    [INTENT.UPDATE]:     600,
     [INTENT.ANALYZE]:    700,
     [INTENT.PRIORITIZE]: 500,
     [INTENT.REPORT]:     800,
@@ -2205,23 +2205,29 @@ function extractActionJSON(text) {
 }
 
 function processAIActions(text) {
-  const result = extractActionJSON(text);
-  if (!result) return text;
+  // Always strip ACTION_JSON from display — do this regardless of parse success
+  const cleanText = (() => {
+    const idx = text.search(/ACTION_JSON:/i);
+    return idx !== -1 ? text.slice(0, idx).trimEnd() : text.trimEnd();
+  })();
 
-  const { json: envelope, raw } = result;
+  const result = extractActionJSON(text);
+  if (!result) return cleanText; // couldn't parse — still return clean text
+
+  const { json: envelope } = result;
   const action  = envelope.action;
   const payload = envelope.payload;
 
   try {
     if (action === 'add_task' && payload?.title) {
-      const t = { id:'ai-'+Date.now(), source:'ai', priority:'medium', status:'todo', board:'AI Generated', description:'', due:null, ...payload };
+      const t = { id:'ai-'+Date.now(), source:'ai', priority:'medium', status:'todo', board:'AI Generated', description:'', due:null, notes:[], ...payload };
       tasks.push(t);
       saveTasks(); updateStats(); renderTasks();
       toast(`✅ AI added: "${t.title}"`, 'ok');
 
     } else if (action === 'add_tasks' && Array.isArray(payload)) {
       payload.forEach((p, i) => {
-        const t = { id:'ai-'+Date.now()+i, source:'ai', priority:'medium', status:'todo', board:'AI Generated', description:'', due:null, ...p };
+        const t = { id:'ai-'+Date.now()+i, source:'ai', priority:'medium', status:'todo', board:'AI Generated', description:'', due:null, notes:[], ...p };
         tasks.push(t);
       });
       saveTasks(); updateStats(); renderTasks();
@@ -2254,15 +2260,9 @@ function processAIActions(text) {
       tasks = tasks.filter(t => t.title !== payload.match && t.id !== payload.match);
       if (tasks.length < before) { saveTasks(); updateStats(); renderTasks(); toast('🗑️ Task deleted', 'ok'); }
     }
-    // action === 'none' — do nothing, just strip the block
   } catch(e) { console.warn('Action processing error:', e); }
 
-  // Remove the ACTION block from displayed text
-  return text
-    .replace(/ACTION_JSON:\s*```[\s\S]*?```/gi, '')
-    .replace(/ACTION_JSON:\s*[\s\S]*/i, '')
-    .replace(/\n+$/, '')
-    .trim();
+  return cleanText;
 }
 
 // ═══════════════════════════════════════════════
