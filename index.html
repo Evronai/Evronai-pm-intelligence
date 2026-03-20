@@ -2554,11 +2554,10 @@ async function executeChat({ userPrompt, displayText, intent, contextOverride = 
 // Strip ACTION block from partial text for display during streaming
 // so the user never sees raw JSON while it's being typed
 function stripActionBlock(text) {
-  return text
-    .replace(/ACTION_JSON:\s*```[\s\S]*?```/gi, '')
-    .replace(/ACTION_JSON:\s*[\{\[][\s\S]*$/i, '')  // catches both { and [ payloads from any point to end
-    .replace(/ACTION_JSON:\s*$/i, '')               // trailing label with no payload yet
-    .trimEnd();
+  // Find the earliest occurrence of ACTION_JSON: and cut everything from there
+  const idx = text.search(/ACTION_JSON:/i);
+  if (idx !== -1) return text.slice(0, idx).trimEnd();
+  return text.trimEnd();
 }
 
 // ── Streaming bubble helpers ──
