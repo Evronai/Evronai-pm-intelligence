@@ -265,29 +265,24 @@ header {
 .notif-badge.show { display: flex; }
 
 /* ── MOBILE RESPONSIVE ── */
-/* ═══════════════════════════════════════════════
-   MOBILE — complete responsive layout
-   Strategy: tab-based navigation on mobile.
-   Bottom nav switches between Tasks / AI / Sources.
-   No 3-panel stack — each panel gets full screen.
-═══════════════════════════════════════════════ */
 @media (max-width: 768px) {
 
-  /* ── Body & App ── */
-  body { overflow: auto; }
+  body { overflow: hidden; }
+
   .app {
     flex-direction: column;
-    height: calc(100vh - 58px);
-    position: relative;
+    height: calc(100vh - 58px - 56px);
+    overflow: hidden;
   }
 
-  /* ── Bottom tab bar ── */
+  /* Bottom tab bar */
   .mobile-tabs {
     display: flex;
     position: fixed; bottom: 0; left: 0; right: 0;
     height: 56px; z-index: 300;
     background: var(--surface);
     border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
   }
   .mobile-tab {
     flex: 1; display: flex; flex-direction: column;
@@ -296,92 +291,63 @@ header {
     cursor: pointer; border: none; background: none;
     font-family: 'Syne', sans-serif; transition: color 0.15s;
   }
-  .mobile-tab i { font-size: 17px; }
+  .mobile-tab i { font-size: 18px; }
   .mobile-tab.active { color: var(--accent); }
-  .mobile-tab .tab-badge {
-    position: absolute; top: 6px;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--danger); display: none;
-  }
-  .mobile-tab .tab-badge.show { display: block; }
 
-  /* ── Panel visibility ── */
-  .sidebar   { display: none; }
-  .main      { display: none; }
-  .ai-panel  { display: none; }
+  /* Hide all panels — JS adds mobile-active to show one */
+  .sidebar  { display: none !important; }
+  .main     { display: none !important; }
+  .ai-panel { display: none !important; }
 
-  .sidebar.mobile-active,
-  .main.mobile-active,
-  .ai-panel.mobile-active {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: calc(100vh - 58px - 56px); /* viewport - header - tab bar */
-    overflow: hidden;
-  }
+  .sidebar.mobile-active  { display: flex !important; flex-direction: column; width: 100%; height: 100%; overflow-y: auto; border: none; }
+  .main.mobile-active     { display: flex !important; flex-direction: column; width: 100%; height: 100%; overflow: hidden; }
+  .ai-panel.mobile-active { display: flex !important; flex-direction: column; width: 100%; height: 100%; overflow: hidden; border: none; }
 
-  /* ── Sidebar as full-screen sources panel ── */
-  .sidebar.mobile-active {
-    overflow-y: auto;
-    border: none;
-    padding-bottom: 12px;
-  }
-  .sidebar .ai-hero { display: block; margin: 12px; }
-  .sidebar .sidebar-section { padding: 12px; }
-  .sidebar .section-label { display: block; }
-  .src-row { padding: 12px 14px; font-size: 14px; }
-  .src-row span:not(.src-count) { display: inline; }
-  .sync-time { display: inline; }
-  .add-src-btn { display: block; }
+  /* Sources panel content */
+  .sidebar.mobile-active .ai-hero { display: block; margin: 12px; }
+  .sidebar.mobile-active .sidebar-section { padding: 12px; }
+  .sidebar.mobile-active .section-label { display: block; }
+  .sidebar.mobile-active .src-row { padding: 12px 14px; font-size: 14px; }
+  .sidebar.mobile-active .src-row span { display: inline !important; }
+  .sidebar.mobile-active .sync-time { display: inline; }
+  .sidebar.mobile-active .add-src-btn { display: block; }
 
-  /* ── Main tasks panel ── */
-  .main.mobile-active {
-    overflow: hidden;
-  }
-  .toolbar {
-    padding: 8px 10px; gap: 6px;
-    flex-wrap: wrap; overflow-x: visible;
-  }
-  .search-wrap { flex: 1; min-width: 140px; max-width: 100%; }
-  .tb-btn { padding: 7px 10px; font-size: 11px; }
+  /* Tasks panel */
+  .toolbar { padding: 8px 10px; gap: 6px; flex-wrap: wrap; }
+  .search-wrap { max-width: 100%; }
+  .tb-btn { padding: 7px 9px; font-size: 11px; }
   .tb-btn span { display: none; }
-  .tb-btn.primary span { display: inline; font-size: 11px; }
-  #sort-sel, #group-sel { font-size: 11px; padding: 6px 8px; }
-  .tasks-area { flex: 1; overflow-y: auto; padding: 10px; }
-  .tasks-grid { grid-template-columns: 1fr; gap: 10px; }
+  .tb-btn.primary { padding: 7px 12px; }
+  .tb-btn.primary span { display: inline; }
+  #sort-sel, #group-sel { font-size: 11px; padding: 5px 7px; max-width: 90px; }
+  .tasks-area { flex: 1; overflow-y: auto; padding: 10px; -webkit-overflow-scrolling: touch; }
+  .tasks-grid { grid-template-columns: 1fr !important; gap: 10px; }
   .task-card .card-actions { opacity: 1; }
   .task-card { padding: 14px; }
 
-  /* ── AI panel ── */
-  .ai-panel.mobile-active {
-    overflow: hidden;
-  }
-  .chat-body { flex: 1; }
+  /* AI panel */
+  .ai-panel.mobile-active .chat-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .ai-panel.mobile-active .panel-hdr,
+  .ai-panel.mobile-active .quick-bar,
+  .ai-panel.mobile-active .chat-input-row { flex-shrink: 0; }
+  .ai-panel.mobile-active .quick-bar { flex-wrap: wrap; }
 
-  /* ── Modals full-screen on mobile ── */
+  /* Modals as bottom sheets */
   .overlay { align-items: flex-end; padding: 0; }
-  .modal {
-    width: 100% !important;
-    max-height: 90vh;
-    border-radius: 20px 20px 0 0;
-    overflow-y: auto;
-  }
+  .modal { width: 100% !important; max-height: 88vh; border-radius: 20px 20px 0 0 !important; overflow-y: auto; }
   .cfg-tabs { flex-wrap: wrap; gap: 4px; }
   .cfg-tab { font-size: 10.5px; padding: 5px 10px; }
 
-  /* ── Header compact ── */
+  /* Header */
   header { padding: 0 12px; }
-  .header-tag { display: none; }
-  .header-divider { display: none; }
-  .btn-connect { display: none; } /* replaced by Sources tab */
+  .header-tag, .header-divider, .btn-connect { display: none; }
+  .icon-btn .btn-label { display: none; }
 }
 
-/* Hide mobile tabs on desktop */
 .mobile-tabs { display: none; }
 
 @media (max-width: 480px) {
   .logo { font-size: 18px; }
-  .stat-num { font-size: 18px; }
 }
 
 /* ── TASKS ── */
@@ -3286,16 +3252,13 @@ setInterval(updateAllSyncTimes, 60000);
 function isMobile() { return window.innerWidth <= 768; }
 
 function switchMobileTab(tab) {
-  if (!isMobile()) return;
-
-  // Update tab button states
+  // Always update tab state — CSS media query controls whether panels are hidden
   document.querySelectorAll('.mobile-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + tab)?.classList.add('active');
 
-  // Show/hide panels
-  const sidebar  = document.querySelector('.sidebar');
-  const main     = document.querySelector('.main');
-  const aiPanel  = document.querySelector('.ai-panel');
+  const sidebar = document.querySelector('.sidebar');
+  const main    = document.querySelector('.main');
+  const aiPanel = document.querySelector('.ai-panel');
 
   [sidebar, main, aiPanel].forEach(el => el?.classList.remove('mobile-active'));
 
@@ -3305,22 +3268,13 @@ function switchMobileTab(tab) {
 }
 
 function initMobileLayout() {
-  if (!isMobile()) return;
-  // Show tasks panel by default
+  // Always call — CSS media query determines if it takes effect visually
   switchMobileTab('tasks');
 }
 
-// Re-evaluate on resize (e.g. rotation)
 window.addEventListener('resize', () => {
-  if (isMobile()) {
-    const activeTab = document.querySelector('.mobile-tab.active')?.id?.replace('tab-','') || 'tasks';
-    switchMobileTab(activeTab);
-  } else {
-    // Desktop — show all panels
-    document.querySelector('.sidebar')?.classList.remove('mobile-active');
-    document.querySelector('.main')?.classList.remove('mobile-active');
-    document.querySelector('.ai-panel')?.classList.remove('mobile-active');
-  }
+  const activeTab = document.querySelector('.mobile-tab.active')?.id?.replace('tab-', '') || 'tasks';
+  switchMobileTab(activeTab);
 });
 
 // ═══════════════════════════════════════════════
