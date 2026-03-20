@@ -2414,6 +2414,77 @@ async function callDeepSeekStream(userMsg, intent, contextOverride, tokenOverrid
 //    contextOverride — optional context string (focused analysis)
 //    onDone       — optional callback after completion
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  FALLBACK REPLY — no API key path
+// ═══════════════════════════════════════════════
+function fallbackReply(text, intent) {
+  const today   = new Date().toISOString().split('T')[0];
+  const high    = tasks.filter(x => x.priority === 'high' && x.status !== 'done');
+  const done    = tasks.filter(x => x.status === 'done');
+  const overdue = tasks.filter(x => x.due && isOverdue(x.due) && x.status !== 'done');
+  const inProg  = tasks.filter(x => x.status === 'in_progress');
+
+  if (intent === INTENT.ADD) {
+    const quoted = text.match(/"([^"]+)"/) || text.match(/'([^']+)'/);
+    if (quoted) {
+      const t = text.toLowerCase();
+      const pri = t.includes('high') || t.includes('urgent') || t.includes('critical') ? 'high'
+                : t.includes('low')  || t.includes('minor')  ? 'low' : 'medium';
+      tasks.push({ id:'ai-'+Date.now(), source:'ai', title:quoted[1], description:'', priority:pri, status:'todo', board:'AI Generated', due:null, notes:[] });
+      saveTasks(); updateStats(); renderTasks();
+      return `✅ Added **"${quoted[1]}"** (${pri} priority)`;
+    }
+    return `To add a task, put the title in quotes:\nAdd task **"Fix login bug"** high priority\n\nOr configure your DeepSeek API key for natural language task creation.`;
+  }
+
+  if (intent === INTENT.DELETE) {
+    if (!done.length) return 'No completed tasks to delete.';
+    const n = done.length;
+    if (!text.toLowerCase().includes('confirm')) {
+      return `This will permanently delete **${n} completed task${n > 1 ? 's' : ''}**:\n${done.slice(0,5).map(t => `• "${t.title}"`).join('\n')}${n > 5 ? `\n• ...and ${n-5} more` : ''}\n\nType **"confirm delete done"** to proceed.`;
+    }
+    tasks = tasks.filter(x => x.status !== 'done');
+    saveTasks(); updateStats(); renderTasks();
+    return `🗑️ Deleted ${n} completed task${n > 1 ? 's' : ''}.`;
+  }
+
+  if (intent === INTENT.PRIORITIZE) {
+    const ranked = [
+      ...overdue.map(t => ({ ...t, _reason: `overdue ${Math.abs(daysUntilDue(t.due))}d` })),
+      ...tasks.filter(t => t.due === today && t.status !== 'done' && !overdue.find(o => o.id === t.id))
+              .map(t => ({ ...t, _reason: 'due today' })),
+      ...high.filter(t => t.status === 'todo' && !overdue.find(o => o.id === t.id))
+             .map(t => ({ ...t, _reason: 'high priority, not started' })),
+      ...high.filter(t => t.status === 'in_progress' && !overdue.find(o => o.id === t.id))
+             .map(t => ({ ...t, _reason: 'high priority, in progress' })),
+    ].slice(0, 5);
+    if (!ranked.length) return '✅ No urgent items — all clear!';
+    return '🎯 **Focus on these first:**\n' + ranked.map((t,i) => `${i+1}. **"${t.title}"** — ${t._reason}`).join('\n');
+  }
+
+  if (intent === INTENT.REPORT) {
+    const boards = [...new Set(tasks.map(t => t.board).filter(Boolean))];
+    const byBoard = boards.slice(0,5).map(b => {
+      const bt = tasks.filter(t => t.board === b);
+      return `• **${b}**: ${bt.length} tasks, ${bt.filter(t=>t.status==='done').length} done`;
+    }).join('\n');
+    return `📊 **Project Report — ${today}**\n\n**Overview**\nTotal: ${tasks.length} | In progress: ${inProg.length} | Done: ${done.length} | Overdue: ${overdue.length}\n\n**By Board**\n${byBoard || 'No boards defined'}\n\n**Action Items**\n${overdue.length ? `• ⚠️ ${overdue.length} overdue task${overdue.length>1?'s':''} need immediate attention` : '• ✅ No overdue items'}${high.filter(t=>t.status==='todo').length ? `\n• 🚨 ${high.filter(t=>t.status==='todo').length} high-priority task${high.filter(t=>t.status==='todo').length>1?'s':''} not yet started` : ''}`;
+  }
+
+  if (intent === INTENT.RISK) {
+    const risks = [];
+    overdue.forEach(t => risks.push(`• ⚠️ **OVERDUE** "${t.title}" — ${Math.abs(daysUntilDue(t.due))}d late [${t.board}]`));
+    high.filter(t => t.status === 'todo').slice(0,3)
+        .forEach(t => risks.push(`• 🚨 **Not started** "${t.title}" — high priority [${t.board}]`));
+    tasks.filter(t => t.due && daysUntilDue(t.due) <= 3 && t.due !== today && t.status !== 'done')
+         .slice(0,2).forEach(t => risks.push(`• 📅 **Due soon** "${t.title}" — ${daysUntilDue(t.due)}d left`));
+    if (!risks.length) return '✅ No significant risks detected.';
+    return `🔍 **Risk Assessment**\n\n${risks.join('\n')}\n\nConfigure DeepSeek API for deeper analysis.`;
+  }
+
+  return `I can see **${tasks.length} tasks**${overdue.length ? ` — ⚠️ ${overdue.length} overdue` : ''}.\n\nWithout a DeepSeek API key I support:\n• **Add task "title"** — creates a task\n• **Delete done** — clears completed (with confirmation)\n• **Prioritize** — ranked focus list\n• **Report** — project summary\n• **Risks** — risk assessment\n\nAdd your API key in **Connect Sources** for full natural language AI.`;
+}
+
 async function executeChat({ userPrompt, displayText, intent, contextOverride = null, onDone = null, tokenOverride = null }) {
   if (aiThinking) return;
 
@@ -2936,8 +3007,6 @@ function importFromFile(input) {
     }
   };
   reader.readAsText(file);
-}
-
 }
 
 // ═══════════════════════════════════════════════
