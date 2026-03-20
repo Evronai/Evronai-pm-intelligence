@@ -1668,6 +1668,8 @@ function cycleStatus(id) {
   t.status = cycle[(cycle.indexOf(t.status) + 1) % cycle.length];
   saveTasks(); updateStats(); renderTasks();
   toast(`↻ ${t.status.replace('_',' ')}`, 'info');
+  // Write status back to source tool
+  if (['trello','jira','asana','monday'].includes(t.source)) writeBack(t);
 }
 
 function startEdit(id) {
@@ -2761,16 +2763,6 @@ async function writeBack(task) {
     }
   } catch(e) {
     toast(`⚠️ Write-back failed: ${e.message}`, 'err');
-  }
-}
-
-// Wrap cycleStatus to trigger write-back
-const _origCycleStatus = cycleStatus;
-function cycleStatus(id) {
-  _origCycleStatus(id);
-  const t = tasks.find(x => x.id === id);
-  if (t && ['trello','jira','asana','monday'].includes(t.source)) {
-    writeBack(t);
   }
 }
 
